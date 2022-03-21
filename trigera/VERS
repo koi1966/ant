@@ -1,0 +1,752 @@
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
++   Ошибочные тригера - в таблице не введены.
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+21.06.2010  Coздание тригера на удаление из таблицы ( dogovor ) записи.
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ALTER TRIGGER tr_delete BEFORE DELETE
+	ORDER 2 ON "DBA"."dogovor"
+	   REFERENCING OLD AS old_
+	FOR EACH ROW
+	/* WHEN ( search_condition ) */
+BEGIN
+insert into dba.log_permis (dogovor) 
+         values (old_.dogovor)
+
+
+	;
+END
+
+
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+21.06.2010  Coздание тригера на удаление из таблицы ( karta ) записи.
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+ALTER TRIGGER tr_delete BEFORE DELETE
+	ORDER 2 ON "DBA"."karta"
+	REFERENCING OLD AS old_
+	FOR EACH ROW
+	/* WHEN ( search_condition ) */
+BEGIN
+
+insert into dba.karta_arhiv ("NZA","Dogovor","Data_R","Data_End","Famile","I","O","Strit","Dom","Kv","Telefon","Summ","Tarif","Lico","Annulir","test","kvitancia") 
+     values (old_.NZA,old_.Dogovor,old_.Data_R,old_.Data_End,old_.Famile,old_.I,old_.O,old_.Strit,old_.Dom,old_.Kv,old_.Telefon,old_.Summ,old_.Tarif,old_.Lico,old_.Annulir,old_.test,old_.kvitancia)
+	;
+======================================================================	
+======================================================================
+======================================================================
+======================================================================
+======================================================================
+======================================================================
+=  Для версии  3. 061  =
+======================================================================
+
+ALTER TRIGGER tr_nachislenie BEFORE UPDATE OF "data_nachisl"
+	ORDER 1 ON "DBA"."dat"
+	REFERENCING OLD AS old_name NEW AS new_name
+	FOR EACH ROW
+	
+BEGIN
+// Начисление за пользование антеной      - 0 
+// Начисление за пользование кабельным ТV - 4 
+UPDATE dba.dogovor 
+SET ostatok=ostatok + tarif 
+WHERE annulir = '0'
+AND dogovor NOT like '20%'
+ // учитывать дату заключения договора
+AND data < new_name.data_nachisl
+;
+UPDATE dba.dogovor 
+SET ostatok=ostatok + tarif 
+WHERE annulir = '4'
+AND data_pley IS NOT NULL
+AND dogovor NOT like '20%'
+ // учитывать дату заключения договора
+AND data < new_name.data_nachisl
+;
+
+UPDATE dba.tarif
+SET data_K = new_name.data_nachisl 
+WHERE Status in ('0','4')
+
+END
+
+======================================================================
+
+
+
+ALTER TRIGGER tr_Data_k_update BEFORE UPDATE OF "Data_K"
+	ORDER 1 ON "DBA"."tarif"
+	REFERENCING OLD AS old_ NEW AS new_ 
+	FOR EACH ROW
+	
+BEGIN
+    update dba.tarif set 
+    symma = (datediff(month,Data_N,new_.Data_K) * tarif)
+/* условие упдейта */
+/* дочернее = ведомое */
+    where dogovor = new_.dogovor
+    and nza = new_.nza
+    and status in ('0','4')
+    ;
+END
+
+
+
+
+==========================================================================
+
+// восстановить после сбоя
+
+    update dba.tarif set symma = (datediff(month,Data_N,Data_K) * tarif)
+
+
+===========================================================================
+
+
+===========================================================================
+// добавить новую таблицу для кабельной ведомости
+===========================================================================
+
+CREATE TABLE "DBA"."ob_vedomost_kab"
+(
+	"id_nza"        		numeric(17,0) NOT NULL DEFAULT autoincrement,
+	"jek"   			varchar(3) NULL,
+	"data_vedomosti"        	varchar(7) NULL,
+	"kol_dogovor"   		numeric(5,0) NULL,
+	"kol_dogovor_l" 		numeric(5,0) NULL,
+	"borg_n"        		numeric(18,2) NULL,
+	"perepl_n"      		numeric(18,2) NULL,
+	"narahov"       		numeric(18,2) NULL,
+	"nadishlo"      		numeric(18,2) NULL,
+	"borg_end"      		numeric(18,2) NULL,
+	"perepl_end"    		numeric(18,2) NULL,
+	PRIMARY KEY ("id_nza")
+)
+go
+
+
+===========================================================================
+
+// добавить новую таблицу для ведомости по абон-плате для кабельной
+===========================================================================
+
+CREATE TABLE "DBA"."abonpata_kab"
+(
+	"id_nza"        		numeric(17,0) NOT NULL DEFAULT autoincrement,
+	"jek"   			varchar(3) NULL,
+	"data_vedomosti"        	varchar(7) NULL,
+	"kol_dogovorov"   		numeric(5,0) NULL,
+	"tarif" 			numeric(18,2) NULL,
+	"naraxovano"        		numeric(18,2) NULL,
+	PRIMARY KEY ("id_nza")
+)
+go
+
+
+
+===========================================================================
+
+// добавить новую таблицу для ведомости по абон-плате обычный
+===========================================================================
+
+CREATE TABLE "DBA"."abonpata"
+(
+	"id_nza"        		numeric(17,0) NOT NULL DEFAULT autoincrement,
+	"jek"   			varchar(3) NULL,
+	"data_vedomosti"        	varchar(7) NULL,
+	"kol_dogovorov"   		numeric(5,0) NULL,
+	"tarif" 			numeric(18,2) NULL,
+	"naraxovano"        		numeric(18,2) NULL,
+	PRIMARY KEY ("id_nza")
+)
+go
+
+
+
+===========================================================================
+
+// добавить новый тригер для корректировка улиц 
+===========================================================================
+
+ALTER TRIGGER rt_update_strit BEFORE UPDATE OF "Strit"
+	ORDER 1 ON "DBA"."strit"
+	REFERENCING OLD AS old_name NEW AS new_name 
+	FOR EACH ROW
+	/* WHEN ( search_condition ) */
+BEGIN
+update dba.karta set strit = new_name.strit
+/* условие упдейта */
+/* дочернее = ведомое */
+    where strit = old_name.strit
+	;
+update dba.dogovor set strit = new_name.strit
+/* условие упдейта */
+/* дочернее = ведомое */
+    where strit = old_name.strit
+;
+END
+
+
+
+===========================================================================
+31.01.2008 - добавление таблицы  vkl - для учета повторного подключения договоров
+
+===========================================================================
+
+create table "DBA"."vkl"
+(
+"nza" numeric(17,0) NOT NULL DEFAULT autoincrement,
+"Dogovor" varchar(7) NOT NULL,    
+"data_oper_txt" varchar(7) NOT NULL,
+"data_oper" date NOT NULL,
+"Summ"  numeric(18,2) NOT NULL,
+data_plat date NULL,
+"Summ_plat"  numeric(18,2) NULL,
+PRIMARY KEY ("NZA")
+)
+
+=========================================================================
+v 3.075
+11.02.2008  УСТРАНЕНИЕ ошыбки. при изменении тарифа на кабельное не 
+изменялся в таблице tarif  статус. 
+=========================================================================
+
+ALTER TRIGGER tr_tarif_update BEFORE UPDATE OF "tarif"
+	ORDER 1 ON "DBA"."dogovor"
+REFERENCING OLD AS old_name NEW AS new_name 
+	FOR EACH ROW
+BEGIN
+declare  @nza        numeric;
+declare  @time_x     date;
+/* dba.tarif - дочерняя таблица */
+/* tarif - имя поля дочерняй таблицы */
+/* new_name.tarif - имя поля ведущей таблицы */
+
+/* узнаем номер записа в таблице тарифов */
+select nza into @nza from tarif where dogovor = new_name.dogovor and status in ('0','4');
+//  select GETDATE( ) into @time_x;
+//SELECT dateadd( day, 1, today() + 6.0/24 );
+
+	update dba.tarif set 
+    data_k = new_name.data_tar, 
+    symma = (datediff(month,Data_N,new_name.data_tar) * tarif),
+    status = '1'
+/* условие упдейта */
+/* дочернее  = ведомое */
+    where dogovor = new_name.dogovor
+    and nza = @nza;
+
+IF new_name.Annulir = '0' THEN
+insert into dba.tarif (tarif, data_n, Data_K, status, dogovor,symma) 
+         values (new_name.tarif, new_name.data_tar,new_name.data_tar, '0', new_name.dogovor,0)
+END IF;
+
+IF new_name.Annulir = '4' THEN
+insert into dba.tarif (tarif, data_n, Data_K, status, dogovor,symma) 
+         values (new_name.tarif, new_name.data_tar,new_name.data_tar, '4', new_name.dogovor,0)
+END IF;
+END
+
+================================================================
+Учет следств  v 3.076               23.02.2008  
+Создаем таблицу  ob_vedomost_kab_dogovr
+для анализа задолженности и переплаты на начало и конец 
+месяца по каждому договору отдельно
+================================================================
+CREATE TABLE "DBA"."ob_vedomost_kab_dogovr"
+(
+	"id_nza"        		numeric(17,0) NOT NULL DEFAULT autoincrement,
+	"dogovor"   		varchar(7) NOT NULL,
+	"data_vedomosti"       	varchar(7) NOT NULL,
+	"kol_dogovor"   		numeric(5,0) NULL,
+	"kol_dogovor_l" 		numeric(5,0) NULL,
+	"borg_n"        		numeric(18,2) NOT NULL,
+	"perepl_n"      		numeric(18,2) NOT NULL,
+	"narahov"       		numeric(18,2) NOT NULL,
+	"nadishlo"      		numeric(18,2) NOT NULL,
+	"borg_end"      		numeric(18,2) NOT NULL,
+	"perepl_end"    		numeric(18,2) NOT NULL,
+	PRIMARY KEY ("id_nza")
+)
+go
+
+================================================================
+
+================================================================
+Учет следств  v 3.079              15.05.2008  
+Создаем таблицу  ob_vedomost_dogovr
+для анализа задолженности и переплаты на начало и конец 
+месяца по каждому договору отдельно 
+================================================================
+CREATE TABLE "DBA"."ob_vedomost_dogovr"
+(
+	"id_nza"        		numeric(17,0) NOT NULL DEFAULT autoincrement,
+	"dogovor"   		varchar(7) NOT NULL,
+	"data_vedomosti"       	varchar(7) NOT NULL,
+	"kol_dogovor"   		numeric(5,0) NULL,
+	"kol_dogovor_l" 		numeric(5,0) NULL,
+	"borg_n"        		numeric(18,2) NOT NULL,
+	"perepl_n"      		numeric(18,2) NOT NULL,
+	"narahov"       		numeric(18,2) NOT NULL,
+	"nadishlo"      		numeric(18,2) NOT NULL,
+	"borg_end"      		numeric(18,2) NOT NULL,
+	"perepl_end"    		numeric(18,2) NOT NULL,
+	PRIMARY KEY ("id_nza")
+)
+go
+
+================================================================
+Учет следств  v 3.080              17.05.2008  
+Создаем тригет в таблице karta что-бы исключить возможность
+не проведения проплаты в таблице dagovor
+================================================================
+
+ALTER TRIGGER tr_plata BEFORE INSERT
+	ORDER 1 ON "DBA"."karta"
+	 REFERENCING NEW AS new_name 
+	FOR EACH ROW
+	/* WHEN ( search_condition ) */
+BEGIN
+UPDATE dba.dogovor 
+SET ostatok=ostatok - new_name.Summ
+WHERE dogovor = new_name.dogovor
+	;
+END
+
+================================================================
+
+ALTER TRIGGER tr_plus_plata BEFORE DELETE
+	ORDER 1 ON "DBA"."karta"
+	REFERENCING OLD AS old_
+	FOR EACH ROW
+	/* WHEN ( search_condition ) */
+BEGIN
+UPDATE dba.dogovor 
+SET ostatok=ostatok + old_.Summ
+WHERE dogovor = old_.dogovor
+
+	;
+END
+
+
+================================================================
+Учет следств  v 3.081              09.11.2008  
+Создаем тригет в таблице ob_vedomost что-бы удалять ошибочно 
+созданые оборотные ведомости. Тригера для ТV и кабельного
+================================================================
+
+ALTER TRIGGER tr_delete_oborotna BEFORE DELETE
+	ORDER 1 ON "DBA"."ob_vedomost"
+	 REFERENCING OLD AS old_
+	FOR EACH ROW
+	/* WHEN ( search_condition ) */
+BEGIN
+	DELETE FROM abonpata WHERE data_vedomosti = old_.data_vedomosti;
+    DELETE FROM ob_vedomost_dogovr WHERE data_vedomosti = old_.data_vedomosti
+END
+
+============================================================
+
+
+ALTER TRIGGER tr_delete_oborotna_kab BEFORE DELETE
+	ORDER 1 ON "DBA"."ob_vedomost_kab"
+	REFERENCING OLD AS old_
+	FOR EACH ROW
+	/* WHEN ( search_condition ) */
+BEGIN
+	DELETE FROM abonpata_kab WHERE data_vedomosti = old_.data_vedomosti;
+    DELETE FROM ob_vedomost_kab_dogovr WHERE data_vedomosti = old_.data_vedomosti
+END
+
+============================================================
+============================================================
+03.04.2009
+в таблице Strit заменть тригер  rt_update_strit
+только для антен   не для кабельного
+
+============================================================
+============================================================
+
+ALTER TRIGGER rt_update_strit BEFORE UPDATE OF "Strit"
+	ORDER 1 ON "DBA"."strit"
+	REFERENCING OLD AS old_name NEW AS new_name 
+	FOR EACH ROW
+	/* WHEN ( search_condition ) */
+BEGIN
+update dba.karta set strit = new_name.strit
+/* условие упдейта */
+/* дочернее = ведомое */
+    where strit = old_name.strit
+    and left(dogovor,2) = old_name.jek
+	;
+
+update dba.dogovor set strit = new_name.strit
+/* условие упдейта */
+/* дочернее = ведомое */
+    where strit = old_name.strit
+    and left(dogovor,2) = old_name.jek
+;
+END
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+или
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ALTER TRIGGER rt_update_strit BEFORE UPDATE OF "Strit"
+	ORDER 1 ON "DBA"."strit"
+	REFERENCING OLD AS old_name NEW AS new_name 
+	FOR EACH ROW
+	/* WHEN ( search_condition ) */
+BEGIN
+/* если договор простой */
+ IF left(old_name.jek,2) != 'КТ' THEN 
+update dba.karta set strit = new_name.strit
+/* условие упдейта */
+/* дочернее = ведомое */
+    where strit = old_name.strit
+    and left(dogovor,2) = old_name.jek
+	;
+/* IF left(old_name.jek,2) != 'КТ' THEN */
+update dba.dogovor set strit = new_name.strit
+
+    where strit = old_name.strit
+    and left(dogovor,2) = old_name.jek
+;
+END IF;
+/*если договор кабельный то менять по 3 символам жека*/
+IF left(old_name.jek,2) = 'КТ' THEN 
+
+update dba.karta set strit = new_name.strit
+    where strit = old_name.strit
+    and left(dogovor,3) = old_name.jek
+	;
+
+update dba.dogovor set strit = new_name.strit
+    where strit = old_name.strit
+    and left(dogovor,3) = old_name.jek
+;
+END IF;
+END
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+14.11.2009 - добавлена процедура на удалене договора с таблиц
+удалить записи из таблиц  -  karta, dogovor_stop, tarif, dogovor
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+/CREATE PROCEDURE DBA."pr_dogovor_delete" (@dogovor char(7) /* parameter, ... */ )
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+ALTER PROCEDURE DBA."pr_dogovor_delete" (@dogovor char(7) )
+/* RESULT ( column_name, ... ) */
+BEGIN
+declare  @nza        numeric;
+declare  @time_x     date;
+declare  @ostatok     numeric;
+
+// if @annulir = '1' then 
+// if select narahov from ob_vedomost_dogovr 
+// datediff
+ SELECT @ostatok=ostatok FROM "DBA"."dogovor" where dogovor = @dogovor;
+
+//if @ostatok = 0 or @ostatok is null then
+if @ostatok = 0 then
+begin
+delete from dogovor_stop where dogovor = @dogovor;
+delete from karta where dogovor = @dogovor;
+delete from dogovor where dogovor = @dogovor;
+delete from tarif where dogovor = @dogovor;
+end
+end if;
+END
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+20.03.2010
+Создание таблицы поквартирных данных
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+CREATE TABLE "DBA"."kvartira"
+( "nza"		numeric(17,0) NOT NULL DEFAULT autoincrement,
+  "id_dom"	 varchar(27) NULL,
+   "kv"		varchar(3) NULL,
+   "ant"		varchar(1) NULL,
+)
+go
+
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+21.06.2010
+Создание таблицы aрхива данных даблицы karta,dogovor
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+CREATE TABLE "DBA"."dogovor_arhiv"
+(
+   "Dogovor"             varchar(7) NOT NULL DEFAULT current user,
+   "Data"           date NOT NULL,
+   "Famile"              varchar(17) NOT NULL,
+   "I"              varchar(14) NOT NULL,
+   "O"              varchar(14) NOT NULL,
+   "Strit"          varchar(20) NOT NULL,
+   "Dom"            varchar(7) NOT NULL,
+   "Kv"             varchar(4) NOT NULL,
+   "Telefon"             varchar(8) NOT NULL,
+   "Annulir"             varchar(1) NOT NULL,
+   "tarif"          numeric(18,2) NOT NULL,
+   "ostatok"             numeric(18,2) NOT NULL,
+   "test"           varchar(1) NULL,
+   "lgota"          varchar(1) NULL,
+   "opisanie"            varchar(100) NULL,
+   "data_vv"             date NULL,
+   "data_stop"           date NULL,
+   "data_pley"           date NULL,
+   "tarif_kabel"         numeric(18,2) NULL,
+   "data_tar"            date NULL,
+   PRIMARY KEY ("Dogovor")
+)
+go
+
+
+CREATE TABLE "DBA"."karta_arhiv"
+(
+   "NZA"            numeric(17,0) NOT NULL DEFAULT autoincrement,
+   "Dogovor"             varchar(7) NOT NULL,
+   "Data_R"              datetime NULL,
+   "Data_End"            date NULL,
+   "Famile"              varchar(17) NOT NULL,
+   "I"              varchar(14) NOT NULL,
+   "O"              varchar(14) NOT NULL,
+   "Strit"          varchar(20) NOT NULL,
+   "Dom"            varchar(7) NOT NULL,
+   "Kv"             varchar(4) NOT NULL,
+   "Telefon"             varchar(8) NOT NULL,
+   "Summ"           numeric(18,2) NOT NULL,
+   "Tarif"          numeric(18,2) NOT NULL,
+   "Lico"           varchar(10) NOT NULL,
+   "Annulir"             varchar(1) NOT NULL,
+   "test"           varchar(1) NULL,
+   "kvitancia"           varchar(7) NULL,
+   PRIMARY KEY ("NZA")
+)
+go
+
+
+
+
+CREATE TABLE "DBA"."dogovor_stop_arhiv"
+(
+	"nza"   			numeric(17,0) NOT NULL DEFAULT autoincrement,
+	"dogovor"       		varchar(7) NOT NULL,
+	"data_home"     		date NULL,
+	"data_end"      		date NULL,
+	"status"        		varchar(1) NULL,
+	PRIMARY KEY ("nza")
+)
+go
+
+
+
+CREATE TABLE "DBA"."tarif_arhiv"
+(
+	"NZA"   			numeric(17,0) NOT NULL DEFAULT autoincrement,
+	"Dogovor"       		varchar(9) NOT NULL,
+	"Data_N"        		date NOT NULL,
+	"Data_K"        		date NULL,
+	"Status"        		varchar(1) NOT NULL,
+	"tarif" 			numeric(18,2) NULL,
+	"symma" 			numeric(18,2) NULL,
+	PRIMARY KEY ("NZA")
+)
+go
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+21.06.2010  Изменение процедуры на удаление из таблицы ( dogovor, карта ) записи.
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ALTER PROCEDURE DBA."pr_dogovor_delete" (@dogovor char(7) )
+/* RESULT ( column_name, ... ) */
+BEGIN
+declare  @nza        numeric;
+declare  @time_x     date;
+declare  @ostatok     numeric;
+
+// if @annulir = '1' then 
+// if select narahov from ob_vedomost_dogovr 
+// datediff
+// SELECT @ostatok=ostatok FROM "DBA"."dogovor" where dogovor.dogovor = @dogovor;
+
+//if @ostatok = 0 or @ostatok is null then
+// if @ostatok = 0 then
+begin
+//
+// delete from dogovor_stop where dogovor = @dogovor;
+insert into dba.dogovor_stop_arhiv select * from dogovor_stop where dogovor_stop.dogovor = @dogovor;
+insert into dba.karta_arhiv select * from karta where karta.dogovor = @dogovor;
+insert into dba.dogovor_arhiv select * from dogovor where dogovor.dogovor = @dogovor;
+insert into dba.tarif_arhiv select * from tarif where tarif.dogovor = @dogovor;
+// удаляем
+delete from dogovor_stop where dogovor_stop.dogovor = @dogovor;
+
+//
+// копируем данные в архив, а зате удаляем
+//insert into dba.karta_arhiv select * from karta where karta.dogovor = @dogovor;
+// удаляем
+delete from karta where karta.dogovor = @dogovor;
+
+//
+// копируем данные в архив, а зате удаляем
+//insert into dba.dogovor_arhiv select * from dogovor where dogovor.dogovor = @dogovor;
+// Удаляем
+delete from dogovor where dogovor.dogovor = @dogovor;
+
+//
+//             delete from tarif where dogovor = @dogovor;
+
+//insert into dba.tarif_arhiv select * from tarif where tarif.dogovor = @dogovor;
+// Удаляем
+delete from tarif where tarif.dogovor = @dogovor;
+
+//
+end
+//end if;
+END
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  21.06.2010 Добавляю еще одну процедуру. 
+Ее задача перемещать договора из архива обратно в
+действующюю таблицу.
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+ALTER PROCEDURE DBA."pr_dogovor_vork" (@dogovor char(7) )
+/* RESULT ( column_name, ... ) */
+BEGIN
+declare  @nza        numeric;
+declare  @time_x     date;
+declare  @ostatok     numeric;
+
+// if @annulir = '1' then 
+// if select narahov from ob_vedomost_dogovr 
+// datediff
+// SELECT @ostatok=ostatok FROM "DBA"."dogovor" where dogovor.dogovor = @dogovor;
+
+//if @ostatok = 0 or @ostatok is null then
+// if @ostatok = 0 then
+begin
+//
+// delete from dogovor_stop where dogovor = @dogovor;
+insert into dba.dogovor_stop select * from dogovor_stop_arhiv where dogovor_stop_arhiv.dogovor = @dogovor;
+insert into dba.karta select * from karta_arhiv where karta_arhiv.dogovor = @dogovor;
+insert into dba.dogovor select * from dogovor_arhiv where dogovor_arhiv.dogovor = @dogovor;
+insert into dba.tarif select * from tarif_arhiv where tarif_arhiv.dogovor = @dogovor;
+// удаляем
+delete from dogovor_stop where dogovor_stop.dogovor = @dogovor;
+
+//
+// копируем данные в архив, а зате удаляем
+//insert into dba.karta_arhiv select * from karta where karta.dogovor = @dogovor;
+// удаляем
+delete from karta_arhiv where karta_arhiv.dogovor = @dogovor;
+
+//
+// копируем данные в архив, а зате удаляем
+//insert into dba.dogovor_arhiv select * from dogovor where dogovor.dogovor = @dogovor;
+// Удаляем
+delete from dogovor_arhiv where dogovor_arhiv.dogovor = @dogovor;
+
+//
+//             delete from tarif where dogovor = @dogovor;
+
+//insert into dba.tarif_arhiv select * from tarif where tarif.dogovor = @dogovor;
+// Удаляем
+delete from tarif_arhiv where tarif_arhiv.dogovor = @dogovor;
+
+//
+end
+//end if;	;
+END
+
+
+END
+
+============================================================================================
+03.02.2012 Созданы дополнительные индексы для сокращеня времени обработки
+           отчетов по абонплате.
+
+============================================================================================
+
+
+CREATE INDEX "in_001" ON "DBA"."dogovor"
+(
+	"data_vv" ASC,
+	"Annulir" ASC,
+	"lgota" ASC
+)
+go
+
+CREATE INDEX "in_000" ON "DBA"."dogovor"
+(
+	"Annulir" ASC,
+	"Data" ASC,
+	"Dogovor" ASC
+)
+go
+
+
+CREATE INDEX "in_000" ON "DBA"."karta"
+(
+	"Data_R" ASC,
+	"Annulir" ASC,
+	"Dogovor" ASC
+)
+go
+
+CREATE INDEX "in_000" ON "DBA"."ob_vedomost"
+(
+	"jek" ASC,
+	"data_vedomosti" ASC
+)
+go
+
+CREATE INDEX "in_001" ON "DBA"."ob_vedomost"
+(
+	"data_vedomosti" ASC
+)
+go
+
+
+CREATE INDEX "in_000" ON "DBA"."abonpata"
+(
+	"data_vedomosti" ASC
+)
+go
+
+CREATE INDEX "in_002" ON "DBA"."ob_vedomost_dogovr"
+(
+	"borg_n" ASC,
+	"perepl_n" ASC,
+	"narahov" ASC,
+	"nadishlo" ASC,
+	"borg_end" ASC,
+	"perepl_end" ASC
+)
+go
+
+CREATE INDEX "in_000" ON "DBA"."ob_vedomost_dogovr"
+(
+	"data_vedomosti" ASC,
+	"dogovor" ASC
+)
+go
+commit work
+go
+
+==========================================================================================
+
+
+

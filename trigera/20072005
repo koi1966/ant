@@ -1,0 +1,95 @@
+Увеличить в таблице jek поле jek c 2 на 3 в однопользовательском режиме
+
+Добавить поле data_tar в таблице dogovor (поле даты смены тарифа)
+
+
++++++++++++++++++++++++++++++++++
++++++++++++++++++++++++++++++++++
+ALTER TRIGGER tr_nachislenie BEFORE UPDATE OF "data_nachisl"
+	ORDER 1 ON "DBA"."dat"
+	REFERENCING OLD AS old_name NEW AS new_name
+	FOR EACH ROW
+	
+BEGIN
+// Начисление за пользование антеной      - 0 
+// Начисление за пользование кабельным ТV - 4 
+UPDATE dba.dogovor 
+SET ostatok=ostatok + tarif 
+WHERE annulir = '0'
+AND dogovor NOT like '20%'
+ // учитывать дату заключения договора
+AND data < new_name.data_nachisl
+;
+UPDATE dba.dogovor 
+SET ostatok=ostatok + tarif 
+WHERE annulir = '4'
+AND data_pley IS NOT NULL
+AND dogovor NOT like '20%'
+ // учитывать дату заключения договора
+AND data < new_name.data_nachisl
+;
+
+UPDATE dba.tarif
+SET data_K = new_name.data_nachisl 
+WHERE Status = 0 
+
+END
+
+
+
+
+
++++++++++++++++++++++++++++++++++++++++++
++++++++++++++++++++++++++++++++++++++++++
+
+ALTER TRIGGER tr_dogovor_insert BEFORE INSERT
+	ORDER 1 ON "DBA"."dogovor"
+	 REFERENCING NEW AS new_name 
+	FOR EACH ROW
+	
+BEGIN
+ if new_name.data_pley is NULL then
+ 
+	insert into dba.tarif (tarif, data_n,data_k, status, dogovor,symma) 
+         values (new_name.tarif, new_name.data,new_name.data, '0', new_name.dogovor,0)
+
+ end if;
+
+if new_name.data_pley is not NULL then
+ 
+	insert into dba.tarif (tarif, data_n,data_k, status, dogovor,symma) 
+         values (new_name.tarif, new_name.data_pley,new_name.data, '0', new_name.dogovor,0);
+ 
+ end if;
+
+
+	insert into dba.karta (dogovor, data_R, Famile, I, O, Strit, Dom, Kv, telefon, tarif,Annulir,Test,Summ,Lico)
+         values (new_name.dogovor,new_name.data,new_name.Famile,new_name.I,new_name.O,
+                 new_name.Strit, new_name.Dom, new_name.Kv, new_name.telefon, 
+                 new_name.tarif,new_name.Annulir,new_name.Test,0,'договор');
+END
+
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+18.10.2005 - для версии 3.054
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+CREATE TRIGGER "tr_data_pley_update" BEFORE UPDATE OF "data_pley"
+	ORDER 1 ON "DBA"."dogovor"
+	/* REFERENCING OLD AS old_name NEW AS new_name */
+	FOR EACH ROW
+	/* WHEN ( search_condition ) */
+BEGIN
+insert into dba.tarif (tarif, data_n,data_k, status, dogovor,symma) 
+   values (new_name.tarif, new_name.data_pley,new_name.data_pley, new_name.Annulir, new_name.dogovor,0)
+	;
+END
+
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+

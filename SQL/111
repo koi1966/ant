@@ -1,0 +1,16 @@
+select left(ob_vedomost_kab_dogovr.dogovor,3) AS jek,ob_vedomost_kab_dogovr.*,dogovor.strit,
+ dogovor.dom,dogovor.kv,dogovor.Famile,dogovor.I,dogovor.O
+ from ob_vedomost_kab_dogovr, dogovor
+ WHERE data_vedomosti= '09.2009'
+ and dogovor.dogovor = ob_vedomost_kab_dogovr.dogovor
+ order  by jek, dogovor.strit,dogovor.dom,dogovor.kv,ob_vedomost_kab_dogovr.dogovor
+
+
+
+
+
+select left(ob_vedomost_kab_dogovr.dogovor,3) AS jek,ob_vedomost_kab_dogovr.*,dogovor.strit,
+ dogovor.dom,dogovor.kv,dogovor.Famile,dogovor.I,dogovor.O
+ from ob_vedomost_kab_dogovr, dogovor
+ WHERE dogovor.dogovor in ( select dogovor from ob_vedomost_kab_dogovr where narahov <> 0 AND data_vedomosti= '09.2009')
+ order  by jek, dogovor.strit,dogovor.dom,dogovor.kv,ob_vedomost_kab_dogovr.dogovor
